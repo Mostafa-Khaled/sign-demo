@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HyperSign — Signature Verification</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen antialiased selection:bg-indigo-500 selection:text-white">
+  <div class="max-w-4xl mx-auto px-4 py-10">
+    <!-- Header -->
+    <header class="border-b border-slate-800 pb-5 mb-8 flex items-center justify-between">
+      <div>
+        <div class="flex items-center gap-2.5">
+          <span class="h-2.5 w-2.5 rounded-full bg-emerald-400"></span>
+          <h1 class="text-xl font-semibold tracking-tight text-white">HyperSign Verification Engine</h1>
+        </div>
+        <p class="text-sm text-slate-400 mt-1">Reference vs. Query Document Signature Validation</p>
+      </div>
+      <span class="text-xs font-mono px-2.5 py-1 rounded bg-slate-900 border border-slate-800 text-slate-400">
+        API: mistaaar/HyperSign
+      </span>
+    </header>
+
+    <!-- Upload Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+      <!-- Reference Upload -->
+      <div class="bg-slate-900/70 border border-slate-800 rounded-xl p-4 flex flex-col">
+        <label class="text-xs font-medium uppercase tracking-wider text-slate-400 mb-3">
+          1. Reference Signature / Document
+        </label>
+        <label id="drop-1" class="relative flex-1 min-h-[210px] border-2 border-dashed border-slate-700 hover:border-indigo-500 rounded-lg flex flex-col items-center justify-center cursor-pointer transition overflow-hidden bg-slate-950/50">
+          <input id="file-1" type="file" accept="image/*" class="hidden" />
+          <img id="preview-1" class="hidden max-h-[200px] w-auto object-contain p-2" />
+          <div id="placeholder-1" class="text-center p-4">
+            <p class="text-sm text-slate-300 font-medium">Click or drop reference image</p>
+            <p class="text-xs text-slate-500 mt-1">PNG, JPG, WEBP</p>
+          </div>
+        </label>
+      </div>
+
+      <!-- Test Upload -->
+      <div class="bg-slate-900/70 border border-slate-800 rounded-xl p-4 flex flex-col">
+        <label class="text-xs font-medium uppercase tracking-wider text-slate-400 mb-3">
+          2. Test Signature / Document
+        </label>
+        <label id="drop-2" class="relative flex-1 min-h-[210px] border-2 border-dashed border-slate-700 hover:border-indigo-500 rounded-lg flex flex-col items-center justify-center cursor-pointer transition overflow-hidden bg-slate-950/50">
+          <input id="file-2" type="file" accept="image/*" class="hidden" />
+          <img id="preview-2" class="hidden max-h-[200px] w-auto object-contain p-2" />
+          <div id="placeholder-2" class="text-center p-4">
+            <p class="text-sm text-slate-300 font-medium">Click or drop test image</p>
+            <p class="text-xs text-slate-500 mt-1">PNG, JPG, WEBP</p>
+          </div>
+        </label>
+      </div>
+    </div>
+
+    <!-- Action Button -->
+    <button id="verify-btn" disabled
+      class="w-full py-3 px-5 rounded-xl font-medium text-sm bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed transition flex items-center justify-center gap-2 shadow-lg shadow-indigo-950/50">
+      <span id="btn-text">Select both images to compare</span>
+    </button>
+
+    <!-- Results Section -->
+    <div id="result-card" class="hidden mt-8 bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-6">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-5">
+        <div>
+          <p class="text-xs uppercase tracking-wider text-slate-400">Verification Verdict</p>
+          <div class="flex items-center gap-3 mt-1.5">
+            <span id="verdict-badge" class="px-3 py-1 rounded-full text-xs font-semibold tracking-wide"></span>
+            <span id="raw-output" class="text-xs font-mono text-slate-400"></span>
+          </div>
+        </div>
+        <div class="sm:text-right">
+          <p class="text-xs uppercase tracking-wider text-slate-400">Cosine Similarity</p>
+          <p id="score-text" class="text-2xl font-mono font-bold text-white mt-0.5">—</p>
+        </div>
+      </div>
+
+      <!-- Extracted Ink Canvases -->
+      <div id="canvases-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div class="bg-slate-950 border border-slate-800 rounded-lg p-3">
+          <p class="text-xs text-slate-400 mb-2 font-mono">Extracted Reference Ink</p>
+          <img id="out-ref" class="w-full h-36 object-contain bg-black rounded" />
+        </div>
+        <div class="bg-slate-950 border border-slate-800 rounded-lg p-3">
+          <p class="text-xs text-slate-400 mb-2 font-mono">Extracted Test Ink</p>
+          <img id="out-test" class="w-full h-36 object-contain bg-black rounded" />
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { Client, handle_file } from "https://cdn.jsdelivr.net/npm/@gradio/client/+esm";
+
+    const file1Input = document.getElementById("file-1");
+    const file2Input = document.getElementById("file-2");
+    const preview1 = document.getElementById("preview-1");
+    const preview2 = document.getElementById("preview-2");
+    const placeholder1 = document.getElementById("placeholder-1");
+    const placeholder2 = document.getElementById("placeholder-2");
+    const verifyBtn = document.getElementById("verify-btn");
+    const btnText = document.getElementById("btn-text");
+    const resultCard = document.getElementById("result-card");
+    const verdictBadge = document.getElementById("verdict-badge");
+    const scoreText = document.getElementById("score-text");
+    const rawOutput = document.getElementById("raw-output");
+    const outRef = document.getElementById("out-ref");
+    const outTest = document.getElementById("out-test");
+    const canvasesGrid = document.getElementById("canvases-grid");
+
+    let file1 = null;
+    let file2 = null;
+
+    function updateState() {
+      verifyBtn.disabled = !(file1 && file2);
+      btnText.textContent = file1 && file2 ? "Verify Signatures" : "Select both images to compare";
+    }
+
+    function bindUpload(input, preview, placeholder, setFile) {
+      input.addEventListener("change", (e) => {
+        const f = e.target.files[0];
+        if (!f) return;
+        setFile(f);
+        preview.src = URL.createObjectURL(f);
+        preview.classList.remove("hidden");
+        placeholder.classList.add("hidden");
+        updateState();
+      });
+    }
+
+    bindUpload(file1Input, preview1, placeholder1, (f) => (file1 = f));
+    bindUpload(file2Input, preview2, placeholder2, (f) => (file2 = f));
+
+    const resolveImgUrl = (val) => (typeof val === "string" ? val : val?.url || val?.path || "");
+
+    verifyBtn.addEventListener("click", async () => {
+      verifyBtn.disabled = true;
+      btnText.textContent = "Analyzing ink & computing embeddings...";
+      resultCard.classList.add("hidden");
+
+      try {
+        const client = await Client.connect("mistaaar/HyperSign");
+        const result = await client.predict("/gr_verify", {
+          img1_rgb: handle_file(file1),
+          img2_rgb: handle_file(file2),
+        });
+
+        const [summaryStr, refCanvas, testCanvas] = result.data;
+        rawOutput.textContent = summaryStr;
+
+        // Parse "Similarity: 0.8123 | Verdict: GENUINE (AUTO APPROVE)"
+        const simMatch = summaryStr.match(/Similarity:\s*([0-9.]+)/i);
+        const verdictMatch = summaryStr.match(/Verdict:\s*(.+)$/i);
+
+        if (simMatch && verdictMatch) {
+          const sim = parseFloat(simMatch[1]);
+          const verdict = verdictMatch[1].trim();
+          scoreText.textContent = `${(sim * 100).toFixed(1)}% (${sim.toFixed(4)})`;
+          verdictBadge.textContent = verdict;
+
+          if (verdict.includes("GENUINE")) {
+            verdictBadge.className = "px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40";
+          } else if (verdict.includes("SUSPICIOUS")) {
+            verdictBadge.className = "px-3 py-1 rounded-full text-xs font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/40";
+          } else {
+            verdictBadge.className = "px-3 py-1 rounded-full text-xs font-semibold bg-rose-500/20 text-rose-300 border border-rose-500/40";
+          }
+        } else {
+          // Error message returned from backend (e.g., could not extract clean ink)
+          scoreText.textContent = "N/A";
+          verdictBadge.textContent = summaryStr;
+          verdictBadge.className = "px-3 py-1 rounded-full text-xs font-semibold bg-rose-500/20 text-rose-300 border border-rose-500/40";
+        }
+
+        const refUrl = resolveImgUrl(refCanvas);
+        const testUrl = resolveImgUrl(testCanvas);
+
+        if (refUrl && testUrl) {
+          outRef.src = refUrl;
+          outTest.src = testUrl;
+          canvasesGrid.classList.remove("hidden");
+        } else {
+          canvasesGrid.classList.add("hidden");
+        }
+
+        resultCard.classList.remove("hidden");
+      } catch (err) {
+        alert("API Error: " + (err.message || err));
+      } finally {
+        verifyBtn.disabled = false;
+        btnText.textContent = "Verify Signatures";
+      }
+    });
+  </script>
+</body>
+</html>
